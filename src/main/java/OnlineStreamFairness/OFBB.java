@@ -30,6 +30,7 @@ import moa.core.DoubleVector;
 import moa.core.Measurement;
 import moa.options.ClassOption;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import util.OrderStatisticTree;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -214,7 +215,6 @@ public class OFBB extends AbstractClassifier implements MultiClassClassifier {
         }
 
         Collections.sort(tempArray, Collections.reverseOrder());
-
         if (sdb > tempArray.size())
             sdb = tempArray.size() - 1;
 
@@ -223,6 +223,34 @@ public class OFBB extends AbstractClassifier implements MultiClassClassifier {
         } catch (Exception e) {
             threshold = 0.5;
         }
+
+        return threshold;
+    }
+
+
+    public double tweak_boundary(OrderStatisticTree<Double> buffer, int sdb) {
+
+        if (sdb < 0) {
+            threshold += (0.5 - threshold) / (2);
+            return threshold;
+        }
+
+        if (buffer.size() == 0) {
+            threshold = 0.5;
+            return threshold;
+        }
+
+        if (sdb > buffer.size()) {
+            threshold = buffer.get(0);
+            return threshold;
+        }
+
+        try {
+            threshold = buffer.get(buffer.size() - 1 - sdb);
+        } catch (Exception e) {
+            threshold = 0.5;
+        }
+
         return threshold;
 
     }

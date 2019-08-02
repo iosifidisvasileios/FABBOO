@@ -237,7 +237,7 @@ public class CFBB_Template {
 
                 if (OPT.equals("EQOP")) {
                     if (abs(window_EQOP) >= 0.001) {
-                        int position = shifted_location(window_tp_protected, window_fn_protected, window_tp_non_protected, window_fn_non_protected);
+                        int position = shifted_location(window_tp_protected,  window_tp_non_protected, window_fn_protected, window_fn_non_protected);
                         Thresholds.add(FairChunkBoosting.tweak_boundary(windowData, position, window_EQOP));
                     } else {
                         Thresholds.add(Thresholds.get(Thresholds.size() - 1));

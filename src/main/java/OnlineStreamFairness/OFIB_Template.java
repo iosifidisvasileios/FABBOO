@@ -210,7 +210,7 @@ public class OFIB_Template {
             if (OPT.equals("EQOP")) {
                 double delayed_EQOP = equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
                 if (abs(delayed_EQOP) >= 0.001) {
-                    int position = shifted_location(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
+                    int position = shifted_location(tp_protected, tp_non_protected,fn_protected,  fn_non_protected);
                     Thresholds.add(FairImbaBoosting.tweak_boundary(buf_predictions, position));
                 } else {
                     Thresholds.add(Thresholds.get(Thresholds.size() - 1));

@@ -35,6 +35,7 @@ public class OFBB_Template {
     public ArrayList<Double> getRecall() {
         return Recall;
     }
+
     private static double class_lamda = 0.9;
 
     public static double Wp = 0;
@@ -209,6 +210,7 @@ public class OFBB_Template {
                 if (abs(delayed_discrimination) >= 0.001) {
                     int position = shifted_location(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
                     Thresholds.add(FairBoosting.tweak_boundary(buf_predictions, position));
+
                 } else {
                     Thresholds.add(Thresholds.get(Thresholds.size() - 1));
                 }
@@ -218,7 +220,7 @@ public class OFBB_Template {
                 double delayed_EQOP = equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
 
                 if (abs(delayed_EQOP) >= 0.001) {
-                    int position = shifted_location(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
+                    int position = shifted_location(tp_protected, tp_non_protected, fn_protected, fn_non_protected);
                     Thresholds.add(FairBoosting.tweak_boundary(buf_predictions, position));
                 } else {
                     Thresholds.add(Thresholds.get(Thresholds.size() - 1));
@@ -246,7 +248,11 @@ public class OFBB_Template {
     }
 
     private static int shifted_location(double classified_prot_pos, double classified_non_prot_pos, double classified_prot_neg, double classified_non_prot_neg) {
-        return (int) ((classified_prot_neg + classified_prot_pos) * ((classified_non_prot_pos) / (classified_non_prot_pos + classified_non_prot_neg)) - classified_prot_pos);
+        return (int) ((classified_prot_neg + classified_prot_pos) *
+                (
+                        (classified_non_prot_pos) / (classified_non_prot_pos + classified_non_prot_neg)
+                )
+                - classified_prot_pos);
     }
 
     private static void update_class_rates(double positives, double negatives) {
