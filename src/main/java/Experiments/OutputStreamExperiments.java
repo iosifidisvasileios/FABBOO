@@ -1,10 +1,9 @@
 package Experiments;
 
-import OnlineStreamFairness.WindowAUCImbalancedPerformanceEvaluator;
 import Competitors.HellingerTree.GHVFDT;
 import OnlineStreamFairness.CFBB;
 import OnlineStreamFairness.OFBB;
-import com.google.common.math.Stats;
+import OnlineStreamFairness.WindowAUCImbalancedPerformanceEvaluator;
 import com.yahoo.labs.samoa.instances.*;
 import moa.classifiers.meta.OnlineSmoothBoost;
 import moa.classifiers.trees.HoeffdingAdaptiveTree;
@@ -41,6 +40,8 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> StatParFair = new ArrayList<Double>();
     private static ArrayList<Double> thresholdFair = new ArrayList<Double>();
     private static ArrayList<Double> EQOPFair = new ArrayList<Double>();
+    private static ArrayList<Double> recallFair = new ArrayList<Double>();
+    private static ArrayList<Double> balaccFair = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanFairChunk = new ArrayList<Double>();
     private static ArrayList<Double> F1FairChunk = new ArrayList<Double>();
@@ -49,6 +50,8 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> StatParFairChunk = new ArrayList<Double>();
     private static ArrayList<Double> thresholdFairChunk = new ArrayList<Double>();
     private static ArrayList<Double> EQOPFairChunk = new ArrayList<Double>();
+    private static ArrayList<Double> recallFairChunk = new ArrayList<Double>();
+    private static ArrayList<Double> balaccFairChunk = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanFairImb = new ArrayList<Double>();
     private static ArrayList<Double> F1FairImb = new ArrayList<Double>();
@@ -57,6 +60,8 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> StatParFairImb = new ArrayList<Double>();
     private static ArrayList<Double> thresholdFairImb = new ArrayList<Double>();
     private static ArrayList<Double> EQOPFairImb = new ArrayList<Double>();
+    private static ArrayList<Double> recallFairImb = new ArrayList<Double>();
+    private static ArrayList<Double> balaccFairImb = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanSimpleBoost = new ArrayList<Double>();
     private static ArrayList<Double> F1SimpleBoost = new ArrayList<Double>();
@@ -64,27 +69,32 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> kappaSimpleBoost = new ArrayList<Double>();
     private static ArrayList<Double> StatParSimpleBoost = new ArrayList<Double>();
     private static ArrayList<Double> EQOPSimpleBoost = new ArrayList<Double>();
+    private static ArrayList<Double> recallSimpleBoost = new ArrayList<Double>();
+    private static ArrayList<Double> balaccSimpleBoost = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanWBTree = new ArrayList<Double>();
     private static ArrayList<Double> F1WBTree = new ArrayList<Double>();
     private static ArrayList<Double> accuracyWBTree = new ArrayList<Double>();
     private static ArrayList<Double> kappaWBTree = new ArrayList<Double>();
     private static ArrayList<Double> StatParWBTree = new ArrayList<Double>();
-    private static ArrayList<Double> EQOPWBTree = new ArrayList<Double>();
+    private static ArrayList<Double> recallWBTree = new ArrayList<Double>();
+    private static ArrayList<Double> balaccWBTree = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanRW = new ArrayList<Double>();
     private static ArrayList<Double> F1RW = new ArrayList<Double>();
     private static ArrayList<Double> accuracyRW = new ArrayList<Double>();
     private static ArrayList<Double> kappaRW = new ArrayList<Double>();
     private static ArrayList<Double> StatParRW = new ArrayList<Double>();
-    private static ArrayList<Double> EQOPRW = new ArrayList<Double>();
+    private static ArrayList<Double> recallRW = new ArrayList<Double>();
+    private static ArrayList<Double> balaccRW = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanMAS = new ArrayList<Double>();
     private static ArrayList<Double> F1MAS = new ArrayList<Double>();
     private static ArrayList<Double> accuracyMAS = new ArrayList<Double>();
     private static ArrayList<Double> kappaMAS = new ArrayList<Double>();
     private static ArrayList<Double> StatParMAS = new ArrayList<Double>();
-    private static ArrayList<Double> EQOPMAS = new ArrayList<Double>();
+    private static ArrayList<Double> recallMAS = new ArrayList<Double>();
+    private static ArrayList<Double> balaccMAS = new ArrayList<Double>();
 
     private static ArrayList<Double> gmeanGHTree = new ArrayList<Double>();
     private static ArrayList<Double> F1GHTree = new ArrayList<Double>();
@@ -92,7 +102,8 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> kappaGHTree = new ArrayList<Double>();
     private static ArrayList<Double> StatParGHTree = new ArrayList<Double>();
     private static ArrayList<Double> EQOPGHTree = new ArrayList<Double>();
-
+    private static ArrayList<Double> recallGHTree = new ArrayList<Double>();
+    private static ArrayList<Double> balaccGHTree = new ArrayList<Double>();
 
     private static int saPos;
     private static int saNeg;
@@ -174,21 +185,39 @@ public class OutputStreamExperiments {
 
     private static GHVFDT GHvfdt;
 
+    private static void stats(weka.core.Instances stream) {
+        int pos_cnt = 0;
+        int neg_cnt = 0;
+        int total = 0;
+        for(weka.core.Instance iii : stream){
+            total+=iii.classValue();
+            if (iii.classValue()==indexOfGranted){
+                pos_cnt+=1;
+            }else{
+                neg_cnt+=1;
+            }
+        }
+
+
+        logger.info("positives = " + pos_cnt);
+        logger.info("negatives = " + neg_cnt);
+        logger.info("total = " + total);
+
+        logger.info("dataset size  = " + stream.size());
+        logger.info("numAttributes = " + stream.numAttributes());
+    }
+
     public static void main(String[] args) throws Exception {
 //        String datasetString = args[0];
 //        windowSize = Integer.valueOf(args[1]);
 //        OPT = args[2];
 //        boolean synth = Boolean.valueOf(args[3]);
-        String datasetString = "kdd";
+        String datasetString = "nypd";
         logger.info("dataset = " + datasetString);
         OPT = "SP";
-        boolean synth = false;
         init_dataset(datasetString);
 
-        if (!synth)
-            outputFileName = "IEEE_BIG_DATA_RESULTS/original_" + datasetString + "_tune_" + OPT + "_";
-        else
-            outputFileName = "IEEE_BIG_DATA_RESULTS/semi_synthetic_" + datasetString + "_tune_" + OPT + "_";
+        outputFileName = "Tables/Stream/" + datasetString + "_tune_" + OPT + "_";
 
 
         ArffLoader.ArffReader arffReader = new ArffLoader.ArffReader(new FileReader(arffInputFileName));
@@ -205,7 +234,6 @@ public class OutputStreamExperiments {
         indexOfDenied = stream.classAttribute().indexOfValue(otherClass); // <=50K: 0, >50K: 1
         indexOfGranted = stream.classAttribute().indexOfValue(targetClass);
 
-        WekaToSamoaInstanceConverter converter = new WekaToSamoaInstanceConverter();
 
 
         Instances dataset = new WekaToSamoaInstanceConverter().samoaInstances(stream);
@@ -214,12 +242,12 @@ public class OutputStreamExperiments {
             dataset.randomize(new Random(0));
 
         init_models(20, currentWindow);
-
-        if (synth) {
-            weka.core.Instances synethtic = swapLabels(stream);
-            for (weka.core.Instance inst : synethtic)
-                dataset.add(converter.samoaInstance(inst));
-        }
+        stats(stream);
+//        if (synth) {
+//            weka.core.Instances synethtic = swapLabels(stream);
+//            for (weka.core.Instance inst : synethtic)
+//                dataset.add(converter.samoaInstance(inst));
+//        }
 
         reset_parameters();
 
@@ -293,10 +321,16 @@ public class OutputStreamExperiments {
             br.write(gmeanSimpleBoost.get(i) + "," + gmeanGHTree.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
         br.close();
 
-        br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_equal_opportunity.csv")));
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "recall.csv")));
         br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
-        for (int i = 0; i < EQOPSimpleBoost.size(); i++)
-            br.write(EQOPSimpleBoost.get(i) + "," + EQOPGHTree.get(i) + "," + EQOPFair.get(i) + "," + EQOPFairImb.get(i) + "," + EQOPFairChunk.get(i) + "\n");
+        for (int i = 0; i < recallFairChunk.size(); i++)
+            br.write(recallSimpleBoost.get(i) + "," + recallGHTree.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
+        br.close();
+
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "bacc.csv")));
+        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        for (int i = 0; i < balaccFairChunk.size(); i++)
+            br.write(balaccSimpleBoost.get(i) + "," + balaccGHTree.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
         br.close();
 
 
@@ -304,6 +338,12 @@ public class OutputStreamExperiments {
         br.write("FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < thresholdFair.size() - 1; i++)
             br.write(thresholdFair.get(i) + "," + thresholdFairImb.get(i) + "," + thresholdFairChunk.get(i) + "\n");
+        br.close();
+
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_equal_opportunity.csv")));
+        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        for (int i = 0; i < EQOPSimpleBoost.size(); i++)
+            br.write(EQOPSimpleBoost.get(i) + "," + EQOPGHTree.get(i) + "," + EQOPFair.get(i) + "," + EQOPFairImb.get(i) + "," + EQOPFairChunk.get(i) + "\n");
         br.close();
 
     }
@@ -330,19 +370,26 @@ public class OutputStreamExperiments {
                     F1RW.get(i) + "," + F1Fair.get(i) + "," + F1FairImb.get(i) + "," + F1FairChunk.get(i) + "\n");
         br.close();
 
-        br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_statistical_parity.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
-        for (int i = 0; i < StatParSimpleBoost.size(); i++)
-            br.write(StatParSimpleBoost.get(i) + "," + StatParGHTree.get(i) + "," + StatParWBTree.get(i) + "," + StatParMAS.get(i) + "," +
-                    StatParRW.get(i) + "," + StatParFair.get(i) + "," + StatParFairImb.get(i) + "," + StatParFairChunk.get(i) + "\n");
-        br.close();
-
-
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "gmean.csv")));
         br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < gmeanSimpleBoost.size(); i++)
             br.write(gmeanSimpleBoost.get(i) + "," + gmeanGHTree.get(i) + "," + gmeanWBTree.get(i) + "," + gmeanMAS.get(i) + "," +
                     gmeanRW.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
+        br.close();
+
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "recall.csv")));
+        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        for (int i = 0; i < recallSimpleBoost.size(); i++)
+            br.write(recallSimpleBoost.get(i) + "," + recallGHTree.get(i) + "," + recallWBTree.get(i) + "," + recallMAS.get(i) + "," +
+                    recallRW.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
+        br.close();
+
+
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "bacc.csv")));
+        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        for (int i = 0; i < balaccSimpleBoost.size(); i++)
+            br.write(balaccSimpleBoost.get(i) + "," + balaccGHTree.get(i) + "," + balaccWBTree.get(i) + "," + balaccMAS.get(i) + "," +
+                    balaccRW.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "boundary.csv")));
@@ -351,6 +398,12 @@ public class OutputStreamExperiments {
             br.write(thresholdFair.get(i) + "," + thresholdFairImb.get(i) + "," + thresholdFairChunk.get(i) + "\n");
         br.close();
 
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_statistical_parity.csv")));
+        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        for (int i = 0; i < StatParSimpleBoost.size(); i++)
+            br.write(StatParSimpleBoost.get(i) + "," + StatParGHTree.get(i) + "," + StatParWBTree.get(i) + "," + StatParMAS.get(i) + "," +
+                    StatParRW.get(i) + "," + StatParFair.get(i) + "," + StatParFairImb.get(i) + "," + StatParFairChunk.get(i) + "\n");
+        br.close();
     }
 
     public static void reweighting(Instances buffer) throws Exception {
@@ -404,7 +457,7 @@ public class OutputStreamExperiments {
                 }
             }
 
-            evaluator.addResult(trainInstanceExample, votes);
+            evaluator.addResultForEvaluation(trainInstanceExample, votes, trainInstanceExample.instance.classValue() == indexOfGranted);
 
             if (trainInst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -485,11 +538,12 @@ public class OutputStreamExperiments {
             kappaRW.add(evaluator.getKappa());
             F1RW.add(evaluator.getF1Score());
             StatParRW.add(delayed_discrimination);
-        }
+            recallRW.add(evaluator.getRecall());
+            balaccRW.add(evaluator.getBACC());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
+        }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
+        logger.info("recall = " + evaluator.getRecall());
 //        logger.info("ephimeral parity = " + Stats.meanOf(SP_rewe_ephimeral));
 
 
@@ -649,7 +703,9 @@ public class OutputStreamExperiments {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
+
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
                     fairnessCase = 1;
@@ -731,15 +787,16 @@ public class OutputStreamExperiments {
             gmeanFair.add(evaluator.getGmean());
             kappaFair.add(evaluator.getKappa());
             F1Fair.add(evaluator.getF1Score());
+            recallFair.add(evaluator.getRecall());
+            balaccFair.add(evaluator.getBACC());
 
             FairBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
 
         }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info(delayed_discrimination);
-//        logger.info("ephimeral parity = " + Stats.meanOf(EQOPFair));
+        logger.info("recall = " + evaluator.getRecall());
+
 //        logger.info(thresholdFair);
 
     }
@@ -789,7 +846,8 @@ public class OutputStreamExperiments {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -861,14 +919,16 @@ public class OutputStreamExperiments {
             kappaFairImb.add(evaluator.getKappa());
             gmeanFairImb.add(evaluator.getGmean());
             F1FairImb.add(evaluator.getF1Score());
+            recallFairImb.add(evaluator.getRecall());
+            balaccFairImb.add(evaluator.getBACC());
 
             FairImbaBoosting.trainOnInstanceImpl(inst);
 
         }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
+        logger.info("recall = " + evaluator.getRecall());
+
 //        logger.info("ephimeral parity = " + Stats.meanOf(SP_fair_imb_ephimeral));
 
     }
@@ -1073,7 +1133,8 @@ public class OutputStreamExperiments {
             }
 
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -1151,6 +1212,8 @@ public class OutputStreamExperiments {
             gmeanFairChunk.add(evaluator.getGmean());
             kappaFairChunk.add(evaluator.getKappa());
             F1FairChunk.add(evaluator.getF1Score());
+            recallFairChunk.add(evaluator.getRecall());
+            balaccFairChunk.add(evaluator.getBACC());
 
             if (OPT.equals("EQOP")) {
                 EQOPFairChunk.add(window_EQOP);
@@ -1162,10 +1225,10 @@ public class OutputStreamExperiments {
             FairChunkBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
 
         }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
+        logger.info("recall = " + evaluator.getRecall());
+
 //        logger.info("ephimeral parity = " + Stats.meanOf(SP_fair_chunk_ephimeral));
 
     }
@@ -1220,7 +1283,8 @@ public class OutputStreamExperiments {
             }
 
             numberSamples++;
-            evaluator.addResult(trainInstanceExample, votes);
+//            evaluator.addResult(trainInstanceExample, votes);
+            evaluator.addResultForEvaluation(trainInstanceExample, votes, trainInstanceExample.instance.classValue() == indexOfGranted);
 
             if (trainInst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -1296,6 +1360,8 @@ public class OutputStreamExperiments {
                         for (int k = 0; k < windowList.length; k++) {
                             double[] ranker_votes = ranker.distributionForInstance(converter.wekaInstance(windowList[k].instance));
                             ranker_evaluator.addResult(new InstanceExample(buffer.get(i)), ranker_votes);
+//                            evaluator.addResultForEvaluation(new InstanceExample(buffer.get(i)), ranker_votes, buffer.get(i).classValue() == indexOfGranted);
+
                         }
 
                         int[] posWindow = ranker_evaluator.getAucEstimator().getPosWindowFromSortedScores();
@@ -1334,14 +1400,15 @@ public class OutputStreamExperiments {
             gmeanMAS.add(evaluator.getGmean());
             kappaMAS.add(evaluator.getKappa());
             F1MAS.add(evaluator.getF1Score());
+            recallMAS.add(evaluator.getRecall());
+            balaccMAS.add(evaluator.getBACC());
 
             StatParMAS.add(delayed_discrimination);
         }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
+        logger.info("recall = " + evaluator.getRecall());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
 //        logger.info("ephimeral parity = " + Stats.meanOf(SP_masa_ephimeral));
 
 
@@ -1455,7 +1522,8 @@ public class OutputStreamExperiments {
             }
 
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -1496,14 +1564,15 @@ public class OutputStreamExperiments {
             kappaWBTree.add(evaluator.getKappa());
             StatParWBTree.add(delayed_discrimination);
             F1WBTree.add(evaluator.getF1Score());
+            recallWBTree.add(evaluator.getRecall());
+            balaccWBTree.add(evaluator.getBACC());
 
             WenBinHT.updateClassifier(converter.wekaInstance(inst));
-
         }
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
-        logger.info("ephimeral parity = " + Stats.meanOf(SP_wen_ephimeral));
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
+
+        logger.info("recall = " + evaluator.getRecall());
+
     }
 
 
@@ -1542,7 +1611,8 @@ public class OutputStreamExperiments {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -1589,12 +1659,15 @@ public class OutputStreamExperiments {
             gmeanSimpleBoost.add(evaluator.getGmean());
             kappaSimpleBoost.add(evaluator.getKappa());
             F1SimpleBoost.add(evaluator.getF1Score());
+            recallSimpleBoost.add(evaluator.getRecall());
+            balaccSimpleBoost.add(evaluator.getBACC());
 
             OnlineBoost.trainOnInstanceImpl(inst);
         }
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
+
+        logger.info("recall = " + evaluator.getRecall());
+
     }
 
     private static void runGHTree(Instances buffer) throws Exception {
@@ -1633,7 +1706,8 @@ public class OutputStreamExperiments {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+//            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -1680,13 +1754,15 @@ public class OutputStreamExperiments {
             gmeanGHTree.add(evaluator.getGmean());
             kappaGHTree.add(evaluator.getKappa());
             F1GHTree.add(evaluator.getF1Score());
+            recallGHTree.add(evaluator.getRecall());
+            balaccGHTree.add(evaluator.getBACC());
 
             GHvfdt.trainOnInstanceImpl(inst);
         }
+        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
-        logger.info("error rate = " + evaluator.getErrorRate());
-        logger.info("balanced error = " + evaluator.getBACC());
-        logger.info("delayed parity = " + delayed_discrimination);
+        logger.info("recall = " + evaluator.getRecall());
+
     }
 
 

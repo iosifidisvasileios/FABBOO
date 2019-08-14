@@ -578,7 +578,6 @@ public class WindowAUCImbalancedPerformanceEvaluator extends
 		//end of HanTTN
 		if (inst.classIsMissing() == false){
 			int trueClass = (int) inst.classValue();
-
 			if (weight > 0.0) {
 				// // initialize evaluator
 				if (totalObservedInstances == 0) {
@@ -598,7 +597,42 @@ public class WindowAUCImbalancedPerformanceEvaluator extends
 					normalizedVote = 0.0;
 				}
 
-				this.aucEstimator.add(normalizedVote, trueClass == 1, Utils.maxIndex(classVotes) == trueClass, sa);
+				this.aucEstimator.add(normalizedVote, trueClass == 0, Utils.maxIndex(classVotes) == trueClass, sa);
+				this.weightMajorityClassifier.add((this.aucEstimator.getRatio() <= 1 ? 0 : 1) == trueClass ? weight: 0);
+			}
+		}
+	}
+
+
+	public void addResultForEvaluation(Example<Instance> exampleInstance, double[] classVotes, boolean isPositive) {
+		InstanceImpl inst = (InstanceImpl)exampleInstance.getData();
+		double weight = inst.weight();
+		//HanTTN added
+		String[] splits = inst.toString().split(",");
+		String sa = splits[saIndex];
+		//end of HanTTN
+		if (inst.classIsMissing() == false){
+			int trueClass = (int) inst.classValue();
+			if (weight > 0.0) {
+				// // initialize evaluator
+				if (totalObservedInstances == 0) {
+					reset(inst.dataset().numClasses());
+				}
+				this.totalObservedInstances += 1;
+
+				//// if classVotes has length == 1, then the negative (0) class got all the votes
+				Double normalizedVote = 0.0;
+
+				//// normalize and add score
+				if(classVotes.length == 2) {
+					normalizedVote = classVotes[1]/(classVotes[0] + classVotes[1]);
+				}
+
+				if(normalizedVote.isNaN()){
+					normalizedVote = 0.0;
+				}
+
+				this.aucEstimator.add(normalizedVote, isPositive, Utils.maxIndex(classVotes) == trueClass, sa);
 				this.weightMajorityClassifier.add((this.aucEstimator.getRatio() <= 1 ? 0 : 1) == trueClass ? weight: 0);
 			}
 		}
