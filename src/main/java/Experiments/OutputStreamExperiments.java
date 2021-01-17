@@ -1,11 +1,9 @@
 package Experiments;
 
-import Competitors.HellingerTree.GHVFDT;
-import OnlineStreamFairness.CFBB;
-import OnlineStreamFairness.OFBB;
-import OnlineStreamFairness.WindowAUCImbalancedPerformanceEvaluator;
+import OnlineStreamFairness.*;
 import com.yahoo.labs.samoa.instances.*;
 import moa.classifiers.meta.OnlineSmoothBoost;
+import moa.classifiers.meta.imbalanced.CSMOTE;
 import moa.classifiers.trees.HoeffdingAdaptiveTree;
 import moa.core.InstanceExample;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
@@ -17,20 +15,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 
-import static java.lang.Math.abs;
+import static java.lang.Math.*;
 
 /**
  * Created by iosifidis on 01.07.19.
  */
 public class OutputStreamExperiments {
 
-    public static OFBB FairBoosting;
-    public static CFBB FairChunkBoosting;
-    public static OFBB FairImbaBoosting;
+    public static FABBOO FairImbaBoosting;
     public static OnlineSmoothBoost OnlineBoost;
     public static HoeffdingAdaptiveTree rwLearner;
     public static HoeffdingAdaptiveTree masLearner;
     public static Competitors.FAHTree.HoeffdingTree WenBinHT;
+    public static CSMOTE cSMOTE;
 
 
     private static ArrayList<Double> accuracyFair = new ArrayList<Double>();
@@ -96,14 +93,14 @@ public class OutputStreamExperiments {
     private static ArrayList<Double> recallMAS = new ArrayList<Double>();
     private static ArrayList<Double> balaccMAS = new ArrayList<Double>();
 
-    private static ArrayList<Double> gmeanGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> F1GHTree = new ArrayList<Double>();
-    private static ArrayList<Double> accuracyGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> kappaGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> StatParGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> EQOPGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> recallGHTree = new ArrayList<Double>();
-    private static ArrayList<Double> balaccGHTree = new ArrayList<Double>();
+    private static ArrayList<Double> gmeanCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> F1CSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> accuracyCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> kappaCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> StatParCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> EQOPCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> recallCSMOTE = new ArrayList<Double>();
+    private static ArrayList<Double> balaccCSMOTE = new ArrayList<Double>();
 
     private static int saPos;
     private static int saNeg;
@@ -113,7 +110,7 @@ public class OutputStreamExperiments {
     private static int windowSize = 1000;
 
 
-    private static final CircularFifoQueue<Double> buf_predictions = new CircularFifoQueue<Double>(5000);
+    private static final CircularFifoQueue<Double> buf_predictions = new CircularFifoQueue<Double>(2000);
 
     private final static Logger logger = Logger.getLogger(OutputStreamExperiments.class.getName());
 
@@ -121,25 +118,7 @@ public class OutputStreamExperiments {
     private static String saName; // sensitive attribute name
     private static String saValue; // sensitive attribute value
 
-    //    private static String saValue = "Female"; // sensitive attribute value
     private static int saIndex; // index of sensitive attribute
-
-    private static ArrayList<Double> SP_rewe_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_fair_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_fair_imb_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_masa_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_fair_chunk_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_wen_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> SP_boost_ephimeral = new ArrayList<Double>();
-/*
-    private static ArrayList<Double> EQOP_rewe_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_fair_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_fair_imb_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_masa_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_fair_chunk_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_wen_ephimeral = new ArrayList<Double>();
-    private static ArrayList<Double> EQOP_boost_ephimeral = new ArrayList<Double>();*/
-
 
     public static double current_sliding_disc = 0;
     public static double EQOP = 0;
@@ -147,16 +126,8 @@ public class OutputStreamExperiments {
 
     public static double delayed_discrimination = 0;
 
-
-    public static int global_counter = 0;
-
     public static double Wp = 0;
     public static double Wn = 0;
-
-/*    public static double Wdp = 0;
-    public static double Wfp = 0;
-    public static double Wdn = 0;
-    public static double Wfn = 0;*/
 
     public static double pos = 0.0;
     public static double neg = 0.0;
@@ -183,48 +154,36 @@ public class OutputStreamExperiments {
     private static int indexOfGranted; // class label: income > 50k
     private static double class_lamda = 0.9;
 
-    private static GHVFDT GHvfdt;
 
     private static void stats(weka.core.Instances stream) {
         int pos_cnt = 0;
         int neg_cnt = 0;
         int total = 0;
-        for(weka.core.Instance iii : stream){
-            total+=iii.classValue();
-            if (iii.classValue()==indexOfGranted){
-                pos_cnt+=1;
-            }else{
-                neg_cnt+=1;
+        for (weka.core.Instance iii : stream) {
+            total += iii.classValue();
+            if (iii.classValue() == indexOfGranted) {
+                pos_cnt += 1;
+            } else {
+                neg_cnt += 1;
             }
         }
-
-
-        logger.info("positives = " + pos_cnt);
-        logger.info("negatives = " + neg_cnt);
-        logger.info("total = " + total);
-
-        logger.info("dataset size  = " + stream.size());
-        logger.info("numAttributes = " + stream.numAttributes());
+        logger.info("positives = " + pos_cnt + ", negatives = " + neg_cnt + ", total = " + total + ", dataset size  = " + stream.size() +", numAttributes = " + stream.numAttributes());
     }
 
     public static void main(String[] args) throws Exception {
-//        String datasetString = args[0];
-//        windowSize = Integer.valueOf(args[1]);
-//        OPT = args[2];
-//        boolean synth = Boolean.valueOf(args[3]);
         String datasetString = "nypd";
         logger.info("dataset = " + datasetString);
         OPT = "SP";
         init_dataset(datasetString);
-
         outputFileName = "Tables/Stream/" + datasetString + "_tune_" + OPT + "_";
-
 
         ArffLoader.ArffReader arffReader = new ArffLoader.ArffReader(new FileReader(arffInputFileName));
         weka.core.Instances stream = arffReader.getData();
 
         if (datasetString.equals("nypd"))
             stream.setClassIndex(3);
+        else if (datasetString.equals("loan"))
+            stream.setClassIndex(stream.numAttributes() - 2);
         else
             stream.setClassIndex(stream.numAttributes() - 1);
 
@@ -234,20 +193,11 @@ public class OutputStreamExperiments {
         indexOfDenied = stream.classAttribute().indexOfValue(otherClass); // <=50K: 0, >50K: 1
         indexOfGranted = stream.classAttribute().indexOfValue(targetClass);
 
-
-
         Instances dataset = new WekaToSamoaInstanceConverter().samoaInstances(stream);
         Instances currentWindow = new Instances(dataset, 0);
-        if (!datasetString.equals("synthetic") && !datasetString.equals("nypd"))
-            dataset.randomize(new Random(0));
 
         init_models(20, currentWindow);
         stats(stream);
-//        if (synth) {
-//            weka.core.Instances synethtic = swapLabels(stream);
-//            for (weka.core.Instance inst : synethtic)
-//                dataset.add(converter.samoaInstance(inst));
-//        }
 
         reset_parameters();
 
@@ -265,74 +215,68 @@ public class OutputStreamExperiments {
             reset_parameters();
         }
 
-
         logger.info("Fair & balanced Boosting");
-        runFairModel(dataset);
+        runFABBOO_Template(dataset);
         reset_parameters();
 
         logger.info("Fair & IM-balanced Boosting");
         runFairImbalancedModel(dataset);
         reset_parameters();
-//
+
         logger.info("Fair Chunk Based Boosting");
-        runChunkFairModel(dataset);
+        runChunkFairModel_Template(dataset);
         reset_parameters();
 
         logger.info("No Fairness Boosting");
         runSimpleBoosting(dataset);
         reset_parameters();
 
-        logger.info("No Fairness GHTree");
-        runGHTree(dataset);
+        logger.info("No Fairness CSMOTE");
+        runCSMOTE(dataset);
         reset_parameters();
-
         if (OPT.equals("SP"))
             flushToFiles(outputFileName);
         else
             flushToFilesForEQOP(outputFileName);
-
     }
 
 
     private static void flushToFilesForEQOP(String outputFileName) throws IOException {
         BufferedWriter br = new BufferedWriter(new FileWriter(new File(outputFileName + "accuracy.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < accuracySimpleBoost.size(); i++)
-            br.write(accuracySimpleBoost.get(i) + "," + accuracyGHTree.get(i) + "," + accuracyFair.get(i) + "," + accuracyFairImb.get(i) + "," + accuracyFairChunk.get(i) + "\n");
+            br.write(accuracySimpleBoost.get(i) + "," + accuracyCSMOTE.get(i) + "," + accuracyFair.get(i) + "," + accuracyFairImb.get(i) + "," + accuracyFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "kappa.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < kappaSimpleBoost.size(); i++)
-            br.write(kappaSimpleBoost.get(i) + "," + kappaGHTree.get(i) + "," + kappaFair.get(i) + "," + kappaFairImb.get(i) + "," + kappaFairChunk.get(i) + "\n");
+            br.write(kappaSimpleBoost.get(i) + "," + kappaCSMOTE.get(i) + "," + kappaFair.get(i) + "," + kappaFairImb.get(i) + "," + kappaFairChunk.get(i) + "\n");
         br.close();
-
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "F1Score.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < F1SimpleBoost.size(); i++)
-            br.write(F1SimpleBoost.get(i) + "," + F1GHTree.get(i) + "," + F1Fair.get(i) + "," + F1FairImb.get(i) + "," + F1FairChunk.get(i) + "\n");
+            br.write(F1SimpleBoost.get(i) + "," + F1CSMOTE.get(i) + "," + F1Fair.get(i) + "," + F1FairImb.get(i) + "," + F1FairChunk.get(i) + "\n");
         br.close();
 
-
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "gmean.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < gmeanFairChunk.size(); i++)
-            br.write(gmeanSimpleBoost.get(i) + "," + gmeanGHTree.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
+            br.write(gmeanSimpleBoost.get(i) + "," + gmeanCSMOTE.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "recall.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < recallFairChunk.size(); i++)
-            br.write(recallSimpleBoost.get(i) + "," + recallGHTree.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
+            br.write(recallSimpleBoost.get(i) + "," + recallCSMOTE.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "bacc.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < balaccFairChunk.size(); i++)
-            br.write(balaccSimpleBoost.get(i) + "," + balaccGHTree.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
+            br.write(balaccSimpleBoost.get(i) + "," + balaccCSMOTE.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
         br.close();
-
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "boundary.csv")));
         br.write("FairBoost, FairImbaBoost, FairChunkBoost\n");
@@ -341,78 +285,71 @@ public class OutputStreamExperiments {
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_equal_opportunity.csv")));
-        br.write("OnlineBoost, GHVFDT, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < EQOPSimpleBoost.size(); i++)
-            br.write(EQOPSimpleBoost.get(i) + "," + EQOPGHTree.get(i) + "," + EQOPFair.get(i) + "," + EQOPFairImb.get(i) + "," + EQOPFairChunk.get(i) + "\n");
+            br.write(EQOPSimpleBoost.get(i) + "," + EQOPCSMOTE.get(i) + "," + EQOPFair.get(i) + "," + EQOPFairImb.get(i) + "," + EQOPFairChunk.get(i) + "\n");
         br.close();
-
     }
 
     private static void flushToFiles(String outputFileName) throws IOException {
         BufferedWriter br = new BufferedWriter(new FileWriter(new File(outputFileName + "accuracy.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < accuracySimpleBoost.size(); i++)
-            br.write(accuracySimpleBoost.get(i) + "," + accuracyGHTree.get(i) + "," + accuracyWBTree.get(i) + "," + accuracyMAS.get(i) + "," +
-                    accuracyRW.get(i) + "," + accuracyFair.get(i) + "," + accuracyFairImb.get(i) + "," + accuracyFairChunk.get(i) + "\n");
+            br.write(accuracySimpleBoost.get(i) + "," + accuracyCSMOTE.get(i) + "," + accuracyWBTree.get(i) + "," + accuracyMAS.get(i) + "," + accuracyRW.get(i) + "," + accuracyFair.get(i) + "," + accuracyFairImb.get(i) + "," + accuracyFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "kappa.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < kappaSimpleBoost.size(); i++)
-            br.write(kappaSimpleBoost.get(i) + "," + kappaGHTree.get(i) + "," + kappaWBTree.get(i) + "," + kappaMAS.get(i) + "," +
-                    kappaRW.get(i) + "," + kappaFair.get(i) + "," + kappaFairImb.get(i) + "," + kappaFairChunk.get(i) + "\n");
+            br.write(kappaSimpleBoost.get(i) + "," + kappaCSMOTE.get(i) + "," + kappaWBTree.get(i) + "," + kappaMAS.get(i) + "," + kappaRW.get(i) + "," + kappaFair.get(i) + "," + kappaFairImb.get(i) + "," + kappaFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "F1Score.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < F1SimpleBoost.size(); i++)
-            br.write(F1SimpleBoost.get(i) + "," + F1GHTree.get(i) + "," + F1WBTree.get(i) + "," + F1MAS.get(i) + "," +
-                    F1RW.get(i) + "," + F1Fair.get(i) + "," + F1FairImb.get(i) + "," + F1FairChunk.get(i) + "\n");
+            br.write(F1SimpleBoost.get(i) + "," + F1CSMOTE.get(i) + "," + F1WBTree.get(i) + "," + F1MAS.get(i) + "," + F1RW.get(i) + "," + F1Fair.get(i) + "," + F1FairImb.get(i) + "," + F1FairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "gmean.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < gmeanSimpleBoost.size(); i++)
-            br.write(gmeanSimpleBoost.get(i) + "," + gmeanGHTree.get(i) + "," + gmeanWBTree.get(i) + "," + gmeanMAS.get(i) + "," +
-                    gmeanRW.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
+            br.write(gmeanSimpleBoost.get(i) + "," + gmeanCSMOTE.get(i) + "," + gmeanWBTree.get(i) + "," + gmeanMAS.get(i) + "," + gmeanRW.get(i) + "," + gmeanFair.get(i) + "," + gmeanFairImb.get(i) + "," + gmeanFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "recall.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < recallSimpleBoost.size(); i++)
-            br.write(recallSimpleBoost.get(i) + "," + recallGHTree.get(i) + "," + recallWBTree.get(i) + "," + recallMAS.get(i) + "," +
-                    recallRW.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
+            br.write(recallSimpleBoost.get(i) + "," + recallCSMOTE.get(i) + "," + recallWBTree.get(i) + "," + recallMAS.get(i) + "," + recallRW.get(i) + "," + recallFair.get(i) + "," + recallFairImb.get(i) + "," + recallFairChunk.get(i) + "\n");
         br.close();
-
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "bacc.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
         for (int i = 0; i < balaccSimpleBoost.size(); i++)
-            br.write(balaccSimpleBoost.get(i) + "," + balaccGHTree.get(i) + "," + balaccWBTree.get(i) + "," + balaccMAS.get(i) + "," +
-                    balaccRW.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
-        br.close();
-
-        br = new BufferedWriter(new FileWriter(new File(outputFileName + "boundary.csv")));
-        br.write("FairBoost, FairImbaBoost, FairChunkBoost\n");
-        for (int i = 0; i < thresholdFair.size() - 1; i++)
-            br.write(thresholdFair.get(i) + "," + thresholdFairImb.get(i) + "," + thresholdFairChunk.get(i) + "\n");
+            br.write(balaccSimpleBoost.get(i) + "," + balaccCSMOTE.get(i) + "," + balaccWBTree.get(i) + "," + balaccMAS.get(i) + "," + balaccRW.get(i) + "," + balaccFair.get(i) + "," + balaccFairImb.get(i) + "," + balaccFairChunk.get(i) + "\n");
         br.close();
 
         br = new BufferedWriter(new FileWriter(new File(outputFileName + "discrimination_statistical_parity.csv")));
-        br.write("OnlineBoost, GHVFDT, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
-        for (int i = 0; i < StatParSimpleBoost.size(); i++)
-            br.write(StatParSimpleBoost.get(i) + "," + StatParGHTree.get(i) + "," + StatParWBTree.get(i) + "," + StatParMAS.get(i) + "," +
-                    StatParRW.get(i) + "," + StatParFair.get(i) + "," + StatParFairImb.get(i) + "," + StatParFairChunk.get(i) + "\n");
+        br.write("OnlineBoost, CSMOTE, WenBin, Massaging_Template, Reweighting_Template, FairBoost, FairImbaBoost, FairChunkBoost\n");
+        try {
+            for (int i = 0; i < StatParSimpleBoost.size() - 2; i++)
+                br.write(StatParSimpleBoost.get(i) + "," + StatParCSMOTE.get(i) + "," + StatParWBTree.get(i) + "," + StatParMAS.get(i) + "," + StatParRW.get(i) + "," + StatParFair.get(i) + "," + StatParFairImb.get(i) + "," + StatParFairChunk.get(i) + "\n");
+        } catch (Exception e) {
+
+        }
+        br.close();
+
+        br = new BufferedWriter(new FileWriter(new File(outputFileName + "boundary.csv")));
+        try {
+            br.write("FairBoost, FairImbaBoost, FairChunkBoost\n");
+            for (int i = 0; i < thresholdFair.size() - 2; i++)
+                br.write(thresholdFair.get(i) + "," + thresholdFairImb.get(i) + "," + thresholdFairChunk.get(i) + "\n");
+        } catch (Exception e) {
+
+        }
         br.close();
     }
 
     public static void reweighting(Instances buffer) throws Exception {
-
-        double window_classified_prot_pos = 0.0;
-        double window_classified_prot_neg = 0.0;
-
-        double window_classified_non_prot_pos = 0.0;
-        double window_classified_non_prot_neg = 0.0;
 
         double tp_protected = 0;
         double fn_protected = 0;
@@ -460,11 +397,6 @@ public class OutputStreamExperiments {
             evaluator.addResultForEvaluation(trainInstanceExample, votes, trainInstanceExample.instance.classValue() == indexOfGranted);
 
             if (trainInst.value(saIndex) == indexOfDeprived) {
-                if (label == indexOfGranted) {
-                    window_classified_prot_pos++;
-                } else {
-                    window_classified_prot_neg++;
-                }
 
                 if (label == indexOfGranted && trainInst.classValue() == indexOfGranted) {
                     tp_protected += 1;
@@ -479,10 +411,8 @@ public class OutputStreamExperiments {
             } else {
                 if (label == indexOfGranted) {
                     classified_non_prot_pos++;
-                    window_classified_non_prot_pos++;
                 } else {
                     classified_non_prot_neg++;
-                    window_classified_non_prot_neg++;
                 }
 
                 if (label == indexOfGranted && trainInst.classValue() == indexOfGranted) {
@@ -507,10 +437,7 @@ public class OutputStreamExperiments {
             nSaNeg = (int) (tn_non_protected + fp_non_protected);
 
 
-            SP_rewe_ephimeral.add(statistical_parity(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg));
-
             static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-
 
             if (numberSamples % windowSize == 0) {
                 if (abs(window_disc) > 0.001) {
@@ -528,10 +455,6 @@ public class OutputStreamExperiments {
                 fp_protected = 0;
                 fn_non_protected = 0;
                 fp_non_protected = 0;
-                window_classified_prot_pos = 0;
-                window_classified_prot_neg = 0;
-                window_classified_non_prot_pos = 0;
-                window_classified_non_prot_neg = 0;
             }
             accuracyRW.add(evaluator.getErrorRate());
             gmeanRW.add(evaluator.getGmean());
@@ -656,149 +579,44 @@ public class OutputStreamExperiments {
             favored = "M";
             targetClass = "FELONY";
             otherClass = "MISDEMEANOR";
+        } else if (datasetString.equals("loan")) {
+            arffInputFileName = "Data\\LoanDataProcessed.arff";
+            saName = "Gender";
+            saValue = "female";
+            favored = "male";
+            targetClass = "true";
+            otherClass = "false";
         }
     }
 
-    private static void runFairModel(Instances buffer) throws Exception {
-        WindowAUCImbalancedPerformanceEvaluator evaluator = new WindowAUCImbalancedPerformanceEvaluator();
-        evaluator.widthOption.setValue(buffer.size());
-        evaluator.setIndex(saIndex);
-        evaluator.prepareForUse();
 
-        double tp_protected = 0;
-        double fn_protected = 0;
-        double tp_non_protected = 0;
-        double fn_non_protected = 0;
+    private static void runChunkFairModel_Template(Instances buffer) throws Exception {
+        final CFBB_Template CFBB = new CFBB_Template(20,0.9, windowSize, saIndex, indexOfDenied, indexOfGranted, indexOfDeprived, OPT, true);
+        CFBB.deploy(new Instances(buffer));
 
-        int fairnessCase = 0;
-        for (int i = 0; i < buffer.size(); i++) {
-            global_counter += 1;
+        accuracyFairChunk = CFBB.getAccuracy();
+        gmeanFairChunk = CFBB.getGmean();
+        kappaFairChunk = CFBB.getKappa();
+        F1FairChunk = CFBB.getF1Score();
+        recallFairChunk = CFBB.getRecall();
+        balaccFairChunk = CFBB.getBACC();
+        thresholdFairChunk = CFBB.getThresholds();
+        EQOPFairChunk = CFBB.getEQOP();
+        StatParFairChunk = CFBB.getStParity();
+    }
+    private static void runFABBOO_Template(Instances buffer) throws Exception {
+        final FABBOO_Template FABBOO = new FABBOO_Template(20, 0.9, 2000, saIndex, indexOfDenied, indexOfGranted, indexOfDeprived, OPT, true);
+        FABBOO.deploy(new Instances(buffer));
 
-            if (i == 0)
-                thresholdFair.add(0.5);
-
-            boolean targetClass = false;
-            Instance inst = buffer.get(i);
-
-            if (inst.classValue() == indexOfGranted) {
-                targetClass = true;
-                pos++;
-            } else {
-                neg++;
-            }
-
-            update_class_rates(pos, neg);
-
-            double[] votes = FairBoosting.getVotesForInstance(inst);
-            double label = 0;
-            try {
-                label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
-            } catch (Exception e) {
-
-                try {
-                    if (!Double.isNaN(votes[indexOfDenied]))
-                        label = indexOfDenied;
-                } catch (Exception e1) {
-                    label = indexOfGranted;
-                }
-            }
-
-//            evaluator.addResult(new InstanceExample(inst), votes);
-            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
-
-            if (inst.value(saIndex) == indexOfDeprived) {
-                if (label == indexOfGranted) {
-                    fairnessCase = 1;
-                    classified_prot_pos++;
-                } else {
-                    fairnessCase = 2;
-                    classified_prot_neg++;
-                }
-
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_protected += 1;
-
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_protected += 1;
-
-                    // misclassifed positive protected instance
-                    try {
-                        buf_predictions.add(votes[indexOfGranted]);
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        // has predicted negative class 100%
-                        buf_predictions.add(0.);
-                    }
-                }
-
-            } else {
-                if (label == indexOfGranted) {
-                    fairnessCase = 3;
-                    classified_non_prot_pos++;
-                } else {
-                    fairnessCase = 4;
-                    classified_non_prot_neg++;
-                }
-
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_non_protected += 1;
-
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_non_protected += 1;
-
-                }
-            }
-/*            double decayedFairness =0;
-            if (fairnessCase == 1)
-                decayedFairness = update_decayed_fairness(1,0,0,0);
-            else if (fairnessCase == 2)
-                decayedFairness = update_decayed_fairness(0,0,1,0);
-            else if (fairnessCase == 3)
-                decayedFairness = update_decayed_fairness(0,1,0,0);
-            else
-                decayedFairness = update_decayed_fairness(0,0,0,1);*/
-
-            if (OPT.equals("SP")) {
-                SP_fair_ephimeral.add(statistical_parity(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg));
-                static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-
-                if (abs(delayed_discrimination) >= 0.001) {
-//                if (abs(decayedFairness) >= 0.001) {
-                    int position = shifted_location(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-                    thresholdFair.add(FairBoosting.tweak_boundary(buf_predictions, position));
-                } else {
-                    thresholdFair.add(thresholdFair.get(thresholdFair.size() - 1));
-                }
-                StatParFair.add(delayed_discrimination);
-            }
-
-            if (OPT.equals("EQOP")) {
-                double delayed_EQOP = equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
-
-                if (abs(delayed_EQOP) >= 0.001) {
-                    int position = shifted_location(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
-                    thresholdFair.add(FairBoosting.tweak_boundary(buf_predictions, position));
-                } else {
-                    thresholdFair.add(thresholdFair.get(thresholdFair.size() - 1));
-                }
-                EQOPFair.add(delayed_EQOP);
-            }
-
-            accuracyFair.add(evaluator.getErrorRate());
-            gmeanFair.add(evaluator.getGmean());
-            kappaFair.add(evaluator.getKappa());
-            F1Fair.add(evaluator.getF1Score());
-            recallFair.add(evaluator.getRecall());
-            balaccFair.add(evaluator.getBACC());
-
-            FairBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
-
-        }
-        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
-
-        logger.info("recall = " + evaluator.getRecall());
-
-//        logger.info(thresholdFair);
-
+        accuracyFair = FABBOO.getAccuracy();
+        gmeanFair = FABBOO.getGmean();
+        kappaFair = FABBOO.getKappa();
+        F1Fair = FABBOO.getF1Score();
+        recallFair = FABBOO.getRecall();
+        balaccFair = FABBOO.getBACC();
+        thresholdFair = FABBOO.getThresholds();
+        EQOPFair = FABBOO.getEQOP();
+        StatParFair = FABBOO.getStParity();
     }
 
     private static void runFairImbalancedModel(Instances buffer) throws Exception {
@@ -846,7 +664,6 @@ public class OutputStreamExperiments {
                 }
             }
 
-//            evaluator.addResult(new InstanceExample(inst), votes);
             evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
@@ -893,7 +710,6 @@ public class OutputStreamExperiments {
 
             if (OPT.equals("SP")) {
 
-                SP_fair_imb_ephimeral.add(statistical_parity(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg));
                 static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
                 if (abs(delayed_discrimination) >= 0.001) {
                     int count_for_sp = shifted_location(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
@@ -1012,21 +828,19 @@ public class OutputStreamExperiments {
 
     private static void init_models(int weakL, Instances currentWindow) {
 
-        FairBoosting = new OFBB(indexOfDeprived, saIndex, indexOfGranted);
-        FairBoosting.ensembleSizeOption.setValue(weakL);
-        FairBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
-        FairBoosting.setModelContext(new InstancesHeader(currentWindow));
-        FairBoosting.prepareForUse();
 
-        FairImbaBoosting = new OFBB(indexOfDeprived, saIndex, indexOfGranted);
+        FairImbaBoosting = new FABBOO(indexOfDeprived, saIndex, indexOfGranted, indexOfDenied, OPT);
         FairImbaBoosting.ensembleSizeOption.setValue(weakL);
         FairImbaBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
         FairImbaBoosting.setModelContext(new InstancesHeader(currentWindow));
         FairImbaBoosting.prepareForUse();
 
-        GHvfdt = new GHVFDT();
-        GHvfdt.setModelContext(new InstancesHeader(currentWindow));
-        GHvfdt.prepareForUse();
+        cSMOTE = new CSMOTE();
+        cSMOTE.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
+        cSMOTE.minSizeAllowedOption.setValue(10);
+        cSMOTE.neighborsOption.setValue(3);
+        cSMOTE.setModelContext(new InstancesHeader(currentWindow));
+        cSMOTE.prepareForUse();
 
         OnlineBoost = new OnlineSmoothBoost();
         OnlineBoost.ensembleSizeOption.setValue(weakL);
@@ -1043,12 +857,6 @@ public class OutputStreamExperiments {
         masLearner.prepareForUse();
 
         WenBinHT = new Competitors.FAHTree.HoeffdingTree();
-
-        FairChunkBoosting = new CFBB(indexOfDeprived, saIndex, indexOfGranted);
-        FairChunkBoosting.ensembleSizeOption.setValue(weakL);
-        FairChunkBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
-        FairChunkBoosting.setModelContext(new InstancesHeader(currentWindow));
-        FairChunkBoosting.prepareForUse();
     }
 
     private static void reset_parameters() {
@@ -1078,160 +886,6 @@ public class OutputStreamExperiments {
         classified_non_prot_neg = 0.0;
     }
 
-
-    private static void runChunkFairModel(Instances buffer) throws Exception {
-
-        WindowAUCImbalancedPerformanceEvaluator evaluator = new WindowAUCImbalancedPerformanceEvaluator();
-        evaluator.widthOption.setValue(buffer.size());
-        evaluator.setIndex(saIndex);
-        evaluator.prepareForUse();
-
-        double window_classified_prot_pos = 0.0;
-        double window_classified_prot_neg = 0.0;
-
-        double window_classified_non_prot_pos = 0.0;
-        double window_classified_non_prot_neg = 0.0;
-        double window_EQOP = 0;
-        double tp_protected = 0;
-        double fn_protected = 0;
-        double tp_non_protected = 0;
-        double fn_non_protected = 0;
-
-        Instances windowData = new Instances(buffer, 0);
-
-        for (int i = 0; i < buffer.size(); i++) {
-            boolean targetClass = false;
-            Instance inst = buffer.get(i);
-            windowData.add(inst);
-
-            if (inst.classValue() == indexOfGranted) {
-                targetClass = true;
-                pos++;
-            } else {
-                neg++;
-            }
-
-
-            if (i == 0)
-                thresholdFairChunk.add(0.5);
-
-
-            update_class_rates(pos, neg);
-
-            double[] votes = FairChunkBoosting.getVotesForInstance(inst);
-            double label = 0;
-            try {
-                label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
-            } catch (Exception e) {
-
-                try {
-                    if (!Double.isNaN(votes[indexOfDenied]))
-                        label = indexOfDenied;
-                } catch (Exception e1) {
-                    label = indexOfGranted;
-                }
-            }
-
-
-//            evaluator.addResult(new InstanceExample(inst), votes);
-            evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
-
-            if (inst.value(saIndex) == indexOfDeprived) {
-                if (label == indexOfGranted) {
-                    classified_prot_pos++;
-                    window_classified_prot_pos++;
-                } else {
-                    classified_prot_neg++;
-                    window_classified_prot_neg++;
-                }
-
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_protected += 1;
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_protected += 1;
-                }
-            } else {
-                if (label == indexOfGranted) {
-                    classified_non_prot_pos++;
-                    window_classified_non_prot_pos++;
-                } else {
-                    classified_non_prot_neg++;
-                    window_classified_non_prot_neg++;
-                }
-
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_non_protected += 1;
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_non_protected += 1;
-                }
-            }
-
-            if (OPT.equals("SP")) {
-                SP_fair_chunk_ephimeral.add(statistical_parity(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg));
-                static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-            }
-
-            if (OPT.equals("EQOP")) {
-                window_EQOP = equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
-            }
-
-            if ((i + 1) % windowSize == 0) {
-
-                if (OPT.equals("SP")) {
-                    if (Math.abs(window_disc) > .001) {
-                        int position = shifted_location(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg);
-                        thresholdFairChunk.add(FairChunkBoosting.tweak_boundary(windowData, position, window_disc));
-                    }
-                }
-
-                if (OPT.equals("EQOP")) {
-                    if (abs(window_EQOP) >= 0.001) {
-                        int position = shifted_location(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
-                        thresholdFairChunk.add(FairChunkBoosting.tweak_boundary(windowData, position, window_EQOP));
-                    } else {
-                        thresholdFairChunk.add(thresholdFairChunk.get(thresholdFairChunk.size() - 1));
-                    }
-                }
-
-                windowData.delete();
-                window_classified_prot_pos = 0.0;
-                window_classified_prot_neg = 0.0;
-                window_classified_non_prot_pos = 0.0;
-                window_classified_non_prot_neg = 0.0;
-
-                tp_protected = 0;
-                fn_protected = 0;
-                tp_non_protected = 0;
-                fn_non_protected = 0;
-
-            } else {
-                thresholdFairChunk.add(thresholdFairChunk.get(thresholdFairChunk.size() - 1));
-            }
-
-            accuracyFairChunk.add(evaluator.getErrorRate());
-            gmeanFairChunk.add(evaluator.getGmean());
-            kappaFairChunk.add(evaluator.getKappa());
-            F1FairChunk.add(evaluator.getF1Score());
-            recallFairChunk.add(evaluator.getRecall());
-            balaccFairChunk.add(evaluator.getBACC());
-
-            if (OPT.equals("EQOP")) {
-                EQOPFairChunk.add(window_EQOP);
-            }
-
-            if (OPT.equals("SP")) {
-                StatParFairChunk.add(delayed_discrimination);
-            }
-            FairChunkBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
-
-        }
-        logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
-
-        logger.info("recall = " + evaluator.getRecall());
-
-//        logger.info("ephimeral parity = " + Stats.meanOf(SP_fair_chunk_ephimeral));
-
-    }
 
     public static void massaging(Instances buffer) throws Exception {
 
@@ -1332,7 +986,6 @@ public class OutputStreamExperiments {
             nSaPos = (int) (tp_non_protected + fn_non_protected);
             nSaNeg = (int) (tn_non_protected + fp_non_protected);
 
-            SP_masa_ephimeral.add(statistical_parity(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg));
             static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
 
             double changes = 0;
@@ -1408,9 +1061,6 @@ public class OutputStreamExperiments {
         logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 
         logger.info("recall = " + evaluator.getRecall());
-
-//        logger.info("ephimeral parity = " + Stats.meanOf(SP_masa_ephimeral));
-
 
     }
 
@@ -1500,10 +1150,6 @@ public class OutputStreamExperiments {
         double window_classified_non_prot_pos = 0.0;
         double window_classified_non_prot_neg = 0.0;
 
-        double tp_protected = 0;
-        double fn_protected = 0;
-        double tp_non_protected = 0;
-        double fn_non_protected = 0;
         for (int i = 0; i < buffer.size(); i++) {
             Instance inst = buffer.get(i);
             double[] votes = WenBinHT.distributionForInstance(converter.wekaInstance(inst));
@@ -1522,7 +1168,6 @@ public class OutputStreamExperiments {
             }
 
 
-//            evaluator.addResult(new InstanceExample(inst), votes);
             evaluator.addResultForEvaluation(new InstanceExample(inst), votes, inst.classValue() == indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
@@ -1534,12 +1179,6 @@ public class OutputStreamExperiments {
                     window_classified_prot_neg++;
                 }
 
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_protected += 1;
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_protected += 1;
-                }
-
             } else {
                 if (label == indexOfGranted) {
                     classified_non_prot_pos++;
@@ -1549,14 +1188,8 @@ public class OutputStreamExperiments {
                     window_classified_non_prot_neg++;
                 }
 
-                if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
-                    tp_non_protected += 1;
-                } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
-                    fn_non_protected += 1;
-                }
 
             }
-            SP_wen_ephimeral.add(statistical_parity(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg));
             static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
 
             accuracyWBTree.add(evaluator.getErrorRate());
@@ -1566,11 +1199,9 @@ public class OutputStreamExperiments {
             F1WBTree.add(evaluator.getF1Score());
             recallWBTree.add(evaluator.getRecall());
             balaccWBTree.add(evaluator.getBACC());
-
             WenBinHT.updateClassifier(converter.wekaInstance(inst));
         }
         logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
-
         logger.info("recall = " + evaluator.getRecall());
 
     }
@@ -1583,11 +1214,6 @@ public class OutputStreamExperiments {
         evaluator.setIndex(saIndex);
         evaluator.prepareForUse();
 
-        double window_classified_prot_pos = 0.0;
-        double window_classified_prot_neg = 0.0;
-
-        double window_classified_non_prot_pos = 0.0;
-        double window_classified_non_prot_neg = 0.0;
 
         double tp_protected = 0;
         double fn_protected = 0;
@@ -1617,10 +1243,8 @@ public class OutputStreamExperiments {
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
                     classified_prot_pos++;
-                    window_classified_prot_pos++;
                 } else {
                     classified_prot_neg++;
-                    window_classified_prot_neg++;
                 }
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
@@ -1632,10 +1256,8 @@ public class OutputStreamExperiments {
             } else {
                 if (label == indexOfGranted) {
                     classified_non_prot_pos++;
-                    window_classified_non_prot_pos++;
                 } else {
                     classified_non_prot_neg++;
-                    window_classified_non_prot_neg++;
                 }
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
@@ -1670,19 +1292,13 @@ public class OutputStreamExperiments {
 
     }
 
-    private static void runGHTree(Instances buffer) throws Exception {
+    private static void runCSMOTE(Instances buffer) throws Exception {
 
         WindowAUCImbalancedPerformanceEvaluator evaluator = new WindowAUCImbalancedPerformanceEvaluator();
         evaluator.widthOption.setValue(buffer.size());
         evaluator.setIndex(saIndex);
         evaluator.prepareForUse();
 
-
-        double window_classified_prot_pos = 0.0;
-        double window_classified_prot_neg = 0.0;
-
-        double window_classified_non_prot_pos = 0.0;
-        double window_classified_non_prot_neg = 0.0;
 
         double tp_protected = 0;
         double fn_protected = 0;
@@ -1692,7 +1308,7 @@ public class OutputStreamExperiments {
         for (int i = 0; i < buffer.size(); i++) {
             Instance inst = buffer.get(i);
 
-            double[] votes = GHvfdt.getVotesForInstance(inst);
+            double[] votes = cSMOTE.getVotesForInstance(inst);
             double label = 0;
             try {
                 label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
@@ -1712,10 +1328,8 @@ public class OutputStreamExperiments {
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
                     classified_prot_pos++;
-                    window_classified_prot_pos++;
                 } else {
                     classified_prot_neg++;
-                    window_classified_prot_neg++;
                 }
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
@@ -1727,10 +1341,8 @@ public class OutputStreamExperiments {
             } else {
                 if (label == indexOfGranted) {
                     classified_non_prot_pos++;
-                    window_classified_non_prot_pos++;
                 } else {
                     classified_non_prot_neg++;
-                    window_classified_non_prot_neg++;
                 }
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
@@ -1743,21 +1355,21 @@ public class OutputStreamExperiments {
 
             if (OPT.equals("SP")) {
                 static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-                StatParGHTree.add(delayed_discrimination);
+                StatParCSMOTE.add(delayed_discrimination);
             }
 
             if (OPT.equals("EQOP")) {
-                EQOPGHTree.add(equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected));
+                EQOPCSMOTE.add(equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected));
             }
 
-            accuracyGHTree.add(evaluator.getErrorRate());
-            gmeanGHTree.add(evaluator.getGmean());
-            kappaGHTree.add(evaluator.getKappa());
-            F1GHTree.add(evaluator.getF1Score());
-            recallGHTree.add(evaluator.getRecall());
-            balaccGHTree.add(evaluator.getBACC());
+            accuracyCSMOTE.add(evaluator.getErrorRate());
+            gmeanCSMOTE.add(evaluator.getGmean());
+            kappaCSMOTE.add(evaluator.getKappa());
+            F1CSMOTE.add(evaluator.getF1Score());
+            recallCSMOTE.add(evaluator.getRecall());
+            balaccCSMOTE.add(evaluator.getBACC());
 
-            GHvfdt.trainOnInstanceImpl(inst);
+            cSMOTE.trainOnInstanceImpl(inst);
         }
         logger.info("tp " + evaluator.getAucEstimator().getCorrectPosPred() + ", positives = " + evaluator.getAucEstimator().getNumPos());
 

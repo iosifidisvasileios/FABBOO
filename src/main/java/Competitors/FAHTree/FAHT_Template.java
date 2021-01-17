@@ -105,7 +105,7 @@ public class FAHT_Template {
             }
 
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResult(new InstanceExample(inst), votes, indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {

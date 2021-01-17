@@ -154,7 +154,8 @@ public class Massaging_Template {
             }
 
             numberSamples++;
-            evaluator.addResult(trainInstanceExample, votes);
+//            evaluator.addResult(trainInstanceExample, votes);
+            evaluator.addResult(trainInstanceExample, votes, indexOfGranted);
 
             if (trainInst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -228,7 +229,7 @@ public class Massaging_Template {
 
                         for (int k = 0; k < windowList.length; k++) {
                             double[] ranker_votes = ranker.distributionForInstance(converter.wekaInstance(windowList[k].instance));
-                            ranker_evaluator.addResult(new InstanceExample(buffer.get(i)), ranker_votes);
+                            ranker_evaluator.addResult(new InstanceExample(buffer.get(i)), ranker_votes, indexOfGranted);
                         }
 
                         int[] posWindow = ranker_evaluator.getAucEstimator().getPosWindowFromSortedScores();

@@ -156,7 +156,7 @@ public class Reweighting_Template {
                 }
             }
 
-            evaluator.addResult(trainInstanceExample, votes);
+            evaluator.addResult(trainInstanceExample, votes, indexOfGranted);
 
             if (trainInst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {

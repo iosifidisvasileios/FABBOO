@@ -17,18 +17,16 @@ import static java.lang.Math.abs;
 public class CFBB_Template {
     private static int saIndex;
 
-    public static CFBB FairChunkBoosting;
-    private static double window_disc = 0;
+    private double overall_disc = 0;
 
     private static int windowSize;
     private static int weakL;
     private static int indexOfDenied;
     private static int indexOfGranted;
     private static int indexOfDeprived;
-    private static double delayed_discrimination;
+    private double window_disc;
+    private boolean StreamEval = false;
     private static String OPT;
-    private static ArrayList<Double> BACC = new ArrayList<Double>();
-    private static ArrayList<Double> Recall = new ArrayList<Double>();
 
     public ArrayList<Double> getBACC() {
         return BACC;
@@ -37,6 +35,7 @@ public class CFBB_Template {
     public ArrayList<Double> getRecall() {
         return Recall;
     }
+
     private static double class_lamda = 0.9;
 
     public static double Wp = 0;
@@ -49,6 +48,8 @@ public class CFBB_Template {
     private static ArrayList<Double> StParity = new ArrayList<Double>();
     private static ArrayList<Double> Thresholds = new ArrayList<Double>();
     private static ArrayList<Double> EQOP = new ArrayList<Double>();
+    private static ArrayList<Double> BACC = new ArrayList<Double>();
+    private static ArrayList<Double> Recall = new ArrayList<Double>();
 
     public ArrayList<Double> getGmean() {
         return Gmean;
@@ -91,13 +92,25 @@ public class CFBB_Template {
         this.OPT = OPT;
     }
 
+    public CFBB_Template(int weakL, double lamda, int window, int saIndex, int indexOfDenied, int indexOfGranted, int indexOfDeprived, String OPT, boolean StreamEval) {
+        this.StreamEval = StreamEval;
+        this.weakL = weakL;
+        this.windowSize = window;
+        class_lamda = lamda;
+        this.saIndex = saIndex;
+        this.indexOfGranted = indexOfGranted;
+        this.indexOfDeprived = indexOfDeprived;
+        this.indexOfDenied = indexOfDenied;
+        this.OPT = OPT;
+    }
 
-    private static void static_monitor_fairness(double prot_pos, double non_prot_pos,
-                                                double prot_neg, double non_prot_neg) {
+
+    private void static_monitor_fairness(double prot_pos, double non_prot_pos,
+                                         double prot_neg, double non_prot_neg) {
 
         double temp_Wdp = prot_pos / (prot_pos + prot_neg + 1);
         double temp_Wfp = non_prot_pos / (non_prot_pos + non_prot_neg + 1);
-        delayed_discrimination = temp_Wfp - temp_Wdp;
+        window_disc = temp_Wfp - temp_Wdp;
     }
 
     private static double equal_opportunity(double tp_protected, double fn_protected, double tp_non_protected, double fn_non_protected) {
@@ -106,11 +119,11 @@ public class CFBB_Template {
 
 
     public void deploy(Instances buffer) throws Exception {
-        FairChunkBoosting = new CFBB(indexOfDeprived, saIndex, indexOfGranted);
-        FairChunkBoosting.ensembleSizeOption.setValue(weakL);
-        FairChunkBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
-        FairChunkBoosting.setModelContext(new InstancesHeader(buffer));
-        FairChunkBoosting.prepareForUse();
+        CFBB fairChunkBoosting = new CFBB(indexOfDeprived, saIndex, indexOfGranted, OPT);
+        fairChunkBoosting.ensembleSizeOption.setValue(weakL);
+        fairChunkBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
+        fairChunkBoosting.setModelContext(new InstancesHeader(buffer));
+        fairChunkBoosting.prepareForUse();
         Thresholds.clear();
 
 
@@ -135,12 +148,16 @@ public class CFBB_Template {
 
         double window_tp_protected = 0;
         double window_fn_protected = 0;
+        double window_fp_protected = 0;
         double window_tp_non_protected = 0;
         double window_fn_non_protected = 0;
+        double window_fp_non_protected = 0;
 
         double tp_protected = 0;
+        double fp_protected = 0;
         double fn_protected = 0;
         double tp_non_protected = 0;
+        double fp_non_protected = 0;
         double fn_non_protected = 0;
 
         int pos = 0;
@@ -167,7 +184,7 @@ public class CFBB_Template {
 
             update_class_rates(pos, neg);
 
-            double[] votes = FairChunkBoosting.getVotesForInstance(inst);
+            double[] votes = fairChunkBoosting.getVotesForInstance(inst);
             double label = 0;
             try {
                 label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
@@ -182,7 +199,7 @@ public class CFBB_Template {
             }
 
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResult(new InstanceExample(inst), votes, indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
@@ -199,6 +216,9 @@ public class CFBB_Template {
                 } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
                     fn_protected += 1;
                     window_fn_protected += 1;
+                } else if (inst.classValue() != indexOfGranted && label == indexOfGranted) {
+                    window_fp_protected += 1;
+                    fp_protected += 1;
                 }
             } else {
                 if (label == indexOfGranted) {
@@ -215,30 +235,41 @@ public class CFBB_Template {
                 } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
                     fn_non_protected += 1;
                     window_fn_non_protected += 1;
+                } else if (inst.classValue() != indexOfGranted && label == indexOfGranted) {
+                    window_fp_non_protected += 1;
+                    fp_non_protected += 1;
                 }
             }
 
             if (OPT.equals("SP")) {
-                statistical_parity(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg);
+                statistical_parity(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
+                if (StreamEval) {
+                    static_monitor_fairness(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg);
+                    StParity.add(overall_disc);
+                }
             }
 
             if (OPT.equals("EQOP")) {
                 window_EQOP = equal_opportunity(window_tp_protected, window_fn_protected, window_tp_non_protected, window_fn_non_protected);
+                if (StreamEval) {
+                    EQOP.add(equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected));
+                }
             }
+
 
             if ((i + 1) % windowSize == 0) {
 
                 if (OPT.equals("SP")) {
                     if (Math.abs(window_disc) > .001) {
                         int position = shifted_location(window_classified_prot_pos, window_classified_non_prot_pos, window_classified_prot_neg, window_classified_non_prot_neg);
-                        Thresholds.add(FairChunkBoosting.tweak_boundary(windowData, position, window_disc));
+                        Thresholds.add(fairChunkBoosting.tweak_boundary(windowData, position, window_disc));
                     }
                 }
 
                 if (OPT.equals("EQOP")) {
                     if (abs(window_EQOP) >= 0.001) {
-                        int position = shifted_location(window_tp_protected,  window_tp_non_protected, window_fn_protected, window_fn_non_protected);
-                        Thresholds.add(FairChunkBoosting.tweak_boundary(windowData, position, window_EQOP));
+                        int position = shifted_location(window_tp_protected, window_tp_non_protected, window_fn_protected, window_fn_non_protected);
+                        Thresholds.add(fairChunkBoosting.tweak_boundary(windowData, position, window_EQOP));
                     } else {
                         Thresholds.add(Thresholds.get(Thresholds.size() - 1));
                     }
@@ -258,38 +289,54 @@ public class CFBB_Template {
             } else {
                 Thresholds.add(Thresholds.get(Thresholds.size() - 1));
             }
+            if (StreamEval) {
+                Accuracy.add(evaluator.getErrorRate());
+                Gmean.add(evaluator.getGmean());
+                Kappa.add(evaluator.getKappa());
+                F1Score.add(evaluator.getF1Score());
+                BACC.add(evaluator.getBACC());
+                Recall.add(evaluator.getRecall());
 
-            FairChunkBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
-
+            }
+            fairChunkBoosting.trainInstanceImbalance(inst, targetClass, Wn - Wp);
         }
-        Accuracy.add(evaluator.getErrorRate());
-        Gmean.add(evaluator.getGmean());
-        Kappa.add(evaluator.getKappa());
-        F1Score.add(evaluator.getF1Score());
-        BACC.add(evaluator.getBACC());
-        Recall.add(evaluator.getRecall());
-        if (OPT.equals("EQOP")) {
-            EQOP.add(equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected));
-        }
+        if (!StreamEval) {
+            Accuracy.add(evaluator.getErrorRate());
+            Gmean.add(evaluator.getGmean());
+            Kappa.add(evaluator.getKappa());
+            F1Score.add(evaluator.getF1Score());
+            BACC.add(evaluator.getBACC());
+            Recall.add(evaluator.getRecall());
+            if (OPT.equals("EQOP")) {
+                EQOP.add(equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected));
+            }
 
-        if (OPT.equals("SP")) {
-            static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-            StParity.add(delayed_discrimination);
+            if (OPT.equals("SP")) {
+                static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
+                StParity.add(window_disc);
+            }
         }
-
     }
 
-    private static double statistical_parity(double prot_pos, double non_prot_pos,
-                                             double prot_neg, double non_prot_neg) {
+    private double statistical_parity(double prot_pos, double non_prot_pos,
+                                      double prot_neg, double non_prot_neg) {
 
         double temp_Wdp = prot_pos / (prot_pos + prot_neg + 1);
         double temp_Wfp = non_prot_pos / (non_prot_pos + non_prot_neg + 1);
-        window_disc = temp_Wfp - temp_Wdp;
-        return window_disc;
+        overall_disc = temp_Wfp - temp_Wdp;
+        return overall_disc;
     }
 
     private static int shifted_location(double classified_prot_pos, double classified_non_prot_pos, double classified_prot_neg, double classified_non_prot_neg) {
         return (int) ((classified_prot_neg + classified_prot_pos) * ((classified_non_prot_pos) / (classified_non_prot_pos + classified_non_prot_neg)) - classified_prot_pos);
+    }
+
+    private double predictive_parity(double tp_protected, double fp_protected, double tp_non_protected, double fp_non_protected) {
+        return tp_non_protected / (tp_non_protected + fp_non_protected) - tp_protected / (tp_protected + fp_protected);
+    }
+
+    private int shifted_location_pred_parity(double tp_protected, double fp_protected, double tp_non_protected, double fp_non_protected) {
+        return (int) (tp_protected * (tp_non_protected + fp_non_protected) / tp_non_protected * (tp_protected + fp_protected));
     }
 
     private static void update_class_rates(double positives, double negatives) {

@@ -15,7 +15,7 @@
  *
  *    You should have received a copy of the GNU General Public License
  *    along with this program. If not, see <http://www.gnu.org/licenses/>.
- *    
+ *
  */
 package OnlineStreamFairness;
 
@@ -29,6 +29,7 @@ import moa.classifiers.MultiClassClassifier;
 import moa.core.DoubleVector;
 import moa.core.Measurement;
 import moa.options.ClassOption;
+import org.apache.commons.collections4.queue.CircularFifoQueue;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,10 +58,12 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
     private int indexOfTargetClass; // sensitive attribute: female
     private int indexOfDeprived; // sensitive attribute: female
     private int saIndex; // index of sensitive attribute
+    private String OPT; // index of sensitive attribute
 
-    public CFBB(int indexOfDeprived, int saIndex, int targetClass) {
+    public CFBB(int indexOfDeprived, int saIndex, int targetClass, String OPT) {
         this.indexOfDeprived = indexOfDeprived;
         this.saIndex = saIndex;
+        this.OPT = OPT;
         this.indexOfTargetClass = targetClass;
     }
 
@@ -129,22 +132,21 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
             weightedInst.setWeight(weight);
             this.ensemble[i].trainOnInstance(weightedInst);
 
-            if (targetClass && imbalanceRate >= 0) {
-                weight = (zt <= 0) ? 1/ (1- imbalanceRate) : Math.pow(1.0 - gamma, zt / 2.0);
-            }else {
-                weight = (zt <= 0) ? 1.0 : Math.pow(1.0 - gamma, zt / 2.0);
+            if (imbalanceRate >= 0 ){
+                if (targetClass) {
+                    weight = weight / (1 - imbalanceRate);
+                }
+                if (!targetClass) {
+                    weight = weight / (1 + imbalanceRate);
+                }
+            } else if( imbalanceRate < 0){
+                if (targetClass) {
+                    weight = weight / (1 - imbalanceRate);
+                }
+                if (!targetClass) {
+                    weight = weight / (1 + imbalanceRate);
+                }
             }
-/*
-            if (targetClass && protGroup && fairness > 0) {
-                weight = (zt <= 0) ? weight /(1- fairness) : weight;
-            }
-            if (targetClass && !protGroup && fairness > 0) {
-                weight = (zt <= 0) ? weight /(1+ fairness) : weight;
-            }*/
-
-//            if (targetClass && !protGroup && fairness > 0) {
-//                weight = (zt <= 0) ? weight - exp( fairness) : weight;
-//            }
 
         }
     }
@@ -172,16 +174,27 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
         }
         combinedVote.normalize();
         double targetConf;
+        if (OPT.equals("EQOP") || OPT.equals("SP")) {
+            try {
+                targetConf = combinedVote.getArrayCopy()[indexOfTargetClass];
+            } catch (Exception e) {
+                targetConf = -1;
+            }
+            if (inst.value(saIndex) == indexOfDeprived && targetConf > threshold)
+                combinedVote.setValue(indexOfTargetClass, 1);
+
+            return combinedVote.getArrayRef();
+        }
         try {
             targetConf = combinedVote.getArrayCopy()[indexOfTargetClass];
-        }catch (Exception e){
+        } catch (Exception e) {
             targetConf = -1;
-
         }
-        if(inst.value(saIndex) == indexOfDeprived && targetConf > threshold)
-            combinedVote.setValue(indexOfTargetClass, 1) ;
+        if (inst.value(saIndex) != indexOfDeprived && targetConf > threshold)
+            combinedVote.setValue(indexOfTargetClass, 1);
 
         return combinedVote.getArrayRef();
+
     }
 
     public boolean isRandomizable() {
@@ -204,10 +217,63 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
         return this.ensemble.clone();
     }
 
+
+    public double tweak_boundary_reverse(Instances buffer, int sdb) {
+
+        if (sdb < 0) {
+            threshold -= (threshold - 0.5) / (2);
+            return threshold;
+        }
+        ArrayList<Double> predictions = new ArrayList<Double>();
+        for (int j = 0; j < buffer.size(); j++) {
+            Instance inst = buffer.get(j);
+
+            DoubleVector combinedVote = new DoubleVector();
+            for (int i = 0; i < this.ensemble.length; i++) {
+                double memberWeight = getEnsembleMemberWeight(i);
+                if (memberWeight > 0.0) {
+                    DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(inst));
+
+                    if (vote.sumOfValues() > 0.0) {
+                        vote.normalize();
+                        vote.scaleValues(memberWeight);
+                        combinedVote.addValues(vote);
+                    }
+
+                } else {
+                    continue;
+                }
+            }
+            combinedVote.normalize();
+            double targetConf;
+            try {
+                targetConf = combinedVote.getArrayCopy()[indexOfTargetClass];
+            } catch (Exception e) {
+                targetConf = 1;
+
+            }
+
+            if (inst.value(saIndex) != indexOfDeprived && inst.classValue() == indexOfTargetClass && targetConf <= 0.5 && sdb >= 0)
+                predictions.add(targetConf);
+        }
+
+        Collections.sort(predictions);
+        if (sdb > predictions.size())
+            sdb = predictions.size() - 1;
+
+        try {
+            threshold = predictions.get(sdb);
+        } catch (Exception e) {
+            threshold = 0.5;
+        }
+
+        return threshold;
+    }
+
     public double tweak_boundary(Instances buffer, int sdb, double disc) {
-        if (disc < 0 || sdb < 0){
-            threshold += (0.5 - threshold)/(2);
-            return threshold ;
+        if (disc < 0 || sdb < 0) {
+            threshold += (0.5 - threshold) / (2);
+            return threshold;
         }
 
         ArrayList<Double> predictions = new ArrayList<Double>();
@@ -234,31 +300,31 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
             double targetConf;
             try {
                 targetConf = combinedVote.getArrayCopy()[indexOfTargetClass];
-            }catch (Exception e){
+            } catch (Exception e) {
                 targetConf = 1;
 
             }
 
-            if(inst.value(saIndex) == indexOfDeprived && inst.classValue() == indexOfTargetClass &&targetConf <= 0.5 && sdb >= 0)
+            if (inst.value(saIndex) == indexOfDeprived && inst.classValue() == indexOfTargetClass && targetConf <= 0.5 && sdb >= 0)
                 predictions.add(targetConf);
         }
         sdb = abs(sdb);
         Collections.sort(predictions, Collections.reverseOrder());
-        if (sdb >= predictions.size() )
-            sdb = predictions.size()-1;
+        if (sdb >= predictions.size())
+            sdb = predictions.size() - 1;
 
         try {
             threshold = predictions.get(sdb);
-        }catch (Exception e){
+        } catch (Exception e) {
             threshold = 0.5;
         }
-        return threshold ;
+        return threshold;
 
     }
 
 
     public void optimize_for_equal_opportunity(Instances buffer, int sdb, double disc) {
-        if (disc < 0 || sdb < 0 ){
+        if (disc < 0 || sdb < 0) {
             threshold = 0.5;
             return;
         }
@@ -289,11 +355,11 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
             double targetConf;
             try {
                 targetConf = combinedVote.getArrayCopy()[indexOfTargetClass];
-            }catch (Exception e){
+            } catch (Exception e) {
                 targetConf = 0;
             }
 
-            if(inst.value(saIndex) == indexOfDeprived && inst.classValue() == indexOfTargetClass && targetConf <= 0.5)
+            if (inst.value(saIndex) == indexOfDeprived && inst.classValue() == indexOfTargetClass && targetConf <= 0.5)
                 predictions.add(targetConf);
         }
         Collections.sort(predictions, Collections.reverseOrder());
@@ -308,7 +374,7 @@ public class CFBB extends AbstractClassifier implements MultiClassClassifier {
 
         try {
             threshold = predictions.get(sdb);
-        }catch (Exception e){
+        } catch (Exception e) {
             System.out.println("sdb = " + sdb);
             System.out.println(predictions);
         }

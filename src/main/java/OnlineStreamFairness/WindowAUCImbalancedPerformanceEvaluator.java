@@ -553,6 +553,11 @@ public class WindowAUCImbalancedPerformanceEvaluator extends
 		reset(this.numClasses);
 	}
 
+	@Override
+	public void addResult(Example<Instance> instanceExample, double[] doubles) {
+
+	}
+
 	public void reset(int numClasses) {
 		if (numClasses != 2) {
 			throw new RuntimeException(
@@ -568,8 +573,8 @@ public class WindowAUCImbalancedPerformanceEvaluator extends
 		this.totalObservedInstances = 0;
 	}
 
-	@Override
-	public void addResult(Example<Instance> exampleInstance, double[] classVotes) {
+//	@Override
+	public void addResult(Example<Instance> exampleInstance, double[] classVotes, int indexOfGranted) {
 		InstanceImpl inst = (InstanceImpl)exampleInstance.getData();
 		double weight = inst.weight();
 		//HanTTN added
@@ -597,7 +602,7 @@ public class WindowAUCImbalancedPerformanceEvaluator extends
 					normalizedVote = 0.0;
 				}
 
-				this.aucEstimator.add(normalizedVote, trueClass == 0, Utils.maxIndex(classVotes) == trueClass, sa);
+				this.aucEstimator.add(normalizedVote, trueClass == indexOfGranted, Utils.maxIndex(classVotes) == trueClass, sa);
 				this.weightMajorityClassifier.add((this.aucEstimator.getRatio() <= 1 ? 0 : 1) == trueClass ? weight: 0);
 			}
 		}

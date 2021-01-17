@@ -11,20 +11,20 @@ import org.apache.log4j.Logger;
 import java.util.ArrayList;
 
 import static java.lang.Math.abs;
+import static java.lang.Math.log;
 
 /**
  * Created by iosifidis on 26.07.19.
  */
 public class OFIB_Template {
-    private static int saIndex;
-    public static OFBB FairImbaBoosting;
+    private int saIndex;
 
-    private static int weakL;
-    private static int indexOfDenied;
-    private static int indexOfGranted;
-    private static int indexOfDeprived;
-    private static double delayed_discrimination;
-    private static String OPT;
+    private int weakL;
+    private int indexOfDenied;
+    private int indexOfGranted;
+    private int indexOfDeprived;
+    private  double delayed_discrimination;
+    private String OPT;
 
     private static ArrayList<Double> Gmean = new ArrayList<Double>();
     private static ArrayList<Double> F1Score = new ArrayList<Double>();
@@ -33,8 +33,11 @@ public class OFIB_Template {
     private static ArrayList<Double> StParity = new ArrayList<Double>();
     private static ArrayList<Double> Thresholds = new ArrayList<Double>();
     private static ArrayList<Double> EQOP = new ArrayList<Double>();
+    private static ArrayList<Double> PredPar = new ArrayList<Double>();
+    private static ArrayList<Double> time = new ArrayList<Double>();
     private static ArrayList<Double> BACC = new ArrayList<Double>();
     private static ArrayList<Double> Recall = new ArrayList<Double>();
+
 
     public ArrayList<Double> getBACC() {
         return BACC;
@@ -44,7 +47,7 @@ public class OFIB_Template {
         return Recall;
     }
 
-    private static final CircularFifoQueue<Double> buf_predictions = new CircularFifoQueue<Double>(5000);
+    private static final CircularFifoQueue<Double> buf_predictions = new CircularFifoQueue<Double>(2000);
 
     public ArrayList<Double> getGmean() {
         return Gmean;
@@ -73,6 +76,9 @@ public class OFIB_Template {
     public ArrayList<Double> getEQOP() {
         return EQOP;
     }
+    public ArrayList<Double> getPredPar() {
+        return PredPar;
+    }
 
     private final static Logger logger = Logger.getLogger(OFIB_Template.class.getName());
 
@@ -87,7 +93,7 @@ public class OFIB_Template {
     }
 
 
-    private static void static_monitor_fairness(double prot_pos, double non_prot_pos,
+    private  void static_monitor_fairness(double prot_pos, double non_prot_pos,
                                                 double prot_neg, double non_prot_neg) {
 
         double temp_Wdp = prot_pos / (prot_pos + prot_neg + 1);
@@ -102,11 +108,11 @@ public class OFIB_Template {
 
     public void deploy(Instances buffer) throws Exception {
 
-        FairImbaBoosting = new OFBB(indexOfDeprived, saIndex, indexOfGranted);
-        FairImbaBoosting.ensembleSizeOption.setValue(weakL);
-        FairImbaBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
-        FairImbaBoosting.setModelContext(new InstancesHeader(buffer));
-        FairImbaBoosting.prepareForUse();
+        FABBOO fairImbaBoosting = new FABBOO(indexOfDeprived, saIndex, indexOfGranted, indexOfDenied, OPT);
+        fairImbaBoosting.ensembleSizeOption.setValue(weakL);
+        fairImbaBoosting.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
+        fairImbaBoosting.setModelContext(new InstancesHeader(buffer));
+        fairImbaBoosting.prepareForUse();
 
 
         WindowAUCImbalancedPerformanceEvaluator evaluator = new WindowAUCImbalancedPerformanceEvaluator();
@@ -114,10 +120,8 @@ public class OFIB_Template {
         evaluator.setIndex(saIndex);
         evaluator.prepareForUse();
 
-        double tp_protected = 0;
-        double fn_protected = 0;
-        double tp_non_protected = 0;
-        double fn_non_protected = 0;
+        Thresholds.clear();
+        buf_predictions.clear();
 
         double classified_prot_pos = 0.0;
         double classified_prot_neg = 0.0;
@@ -125,21 +129,21 @@ public class OFIB_Template {
         double classified_non_prot_pos = 0.0;
         double classified_non_prot_neg = 0.0;
 
-        Thresholds.clear();
-        buf_predictions.clear();
+        double tp_protected = 0;
+        double fn_protected = 0;
+        double fp_protected = 0;
+        double tp_non_protected = 0;
+        double fn_non_protected = 0;
+        double fp_non_protected = 0;
 
+        long timeStart = System.nanoTime();
         for (int i = 0; i < buffer.size(); i++) {
-
-
-            boolean targetClass = false;
-            Instance inst = buffer.get(i);
-
-
             if (i == 0)
                 Thresholds.add(0.5);
 
+             Instance inst = buffer.get(i);
 
-            double[] votes = FairImbaBoosting.getVotesForInstance(inst);
+            double[] votes = fairImbaBoosting.getVotesForInstance(inst);
             double label = 0;
             try {
                 label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
@@ -153,8 +157,7 @@ public class OFIB_Template {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
-
+            evaluator.addResult(new InstanceExample(inst), votes, indexOfGranted);
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
                     classified_prot_pos++;
@@ -164,24 +167,23 @@ public class OFIB_Template {
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
                     tp_protected += 1;
+
                 } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
                     fn_protected += 1;
-                    // misclassifed positive protected instance
-                    try {
-                        buf_predictions.add(votes[indexOfGranted]);
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        // has predicted negative class 100%
-                        buf_predictions.add(0.);
+
+                    if (!OPT.equals("PredPar")) {
+                        // misclassifed positive protected instance
+                        try {
+                            buf_predictions.add(votes[indexOfGranted]);
+                        } catch (ArrayIndexOutOfBoundsException e) {
+                            // has predicted negative class 100%
+                            buf_predictions.add(0.);
+                        }
                     }
-                } else if (inst.classValue() != indexOfGranted && label != indexOfGranted) {
-                    // correctly negative protected instance
-//                    try {
-//                        buf_predictions.add(votes[indexOfGranted]);
-//                    } catch (ArrayIndexOutOfBoundsException e) {
-//                        // has predicted negative class 100%
-//                        buf_predictions.add(0.);
-//                    }
+                } else if (inst.classValue() != indexOfGranted && label == indexOfGranted) {
+                    fp_protected += 1;
                 }
+
             } else {
                 if (label == indexOfGranted) {
                     classified_non_prot_pos++;
@@ -191,34 +193,58 @@ public class OFIB_Template {
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
                     tp_non_protected += 1;
+                    if (OPT.equals("PredPar")) {
+                        // misclassifed positive protected instance
+                        try {
+                            buf_predictions.add(votes[indexOfGranted]);
+                        } catch (ArrayIndexOutOfBoundsException e) {
+                            // has predicted negative class 100%
+                            buf_predictions.add(1.0);
+                        }
+                    }
                 } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
                     fn_non_protected += 1;
+                } else if (inst.classValue() != indexOfGranted && label == indexOfGranted) {
+                    fp_non_protected += 1;
                 }
             }
 
 
             if (OPT.equals("SP")) {
+
                 static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
+
                 if (abs(delayed_discrimination) >= 0.001) {
-                    int count_for_sp = shifted_location(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
-                    Thresholds.add(FairImbaBoosting.tweak_boundary(buf_predictions, count_for_sp));
+                    int position = shifted_location(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
+                    Thresholds.add(fairImbaBoosting.tweak_boundary(buf_predictions, position));
+
                 } else {
                     Thresholds.add(Thresholds.get(Thresholds.size() - 1));
                 }
-            }
-
-            if (OPT.equals("EQOP")) {
+            } else if (OPT.equals("EQOP")) {
                 double delayed_EQOP = equal_opportunity(tp_protected, fn_protected, tp_non_protected, fn_non_protected);
+//                logger.info(delayed_EQOP);
                 if (abs(delayed_EQOP) >= 0.001) {
-                    int position = shifted_location(tp_protected, tp_non_protected,fn_protected,  fn_non_protected);
-                    Thresholds.add(FairImbaBoosting.tweak_boundary(buf_predictions, position));
+                    int position = shifted_location(tp_protected, tp_non_protected, fn_protected, fn_non_protected);
+
+                    Thresholds.add(fairImbaBoosting.tweak_boundary(buf_predictions, position));
+//                    logger.info(i + "\t" + delayed_EQOP + ", " + position + ", "+  Thresholds.get(Thresholds.size() - 1));
+
                 } else {
                     Thresholds.add(Thresholds.get(Thresholds.size() - 1));
                 }
+            } else if (OPT.equals("PredPar")) {
+                double predParity = predictive_parity(tp_protected, fp_protected, tp_non_protected, fp_non_protected);
+                int position = shifted_location_pred_parity(tp_protected, fp_protected, tp_non_protected, fp_non_protected);
+                if (abs(predParity) >= 0.001) {
+                    Thresholds.add(fairImbaBoosting.tweak_boundary_reverse(buf_predictions, position));
+                } else {
+                    Thresholds.add(Thresholds.get(Thresholds.size() - 1));
+                }
+//                logger.info(i + ","+ predParity + "," + position+ "," + Thresholds.get(Thresholds.size() - 1) );
             }
 
-
-            FairImbaBoosting.trainOnInstanceImpl(inst);
+            fairImbaBoosting.trainOnInstanceImpl(inst);
 
         }
 
@@ -237,7 +263,13 @@ public class OFIB_Template {
         BACC.add(evaluator.getBACC());
         Recall.add(evaluator.getRecall());
     }
+    private double predictive_parity(double tp_protected, double fp_protected, double tp_non_protected, double fp_non_protected) {
+        return (tp_non_protected / (tp_non_protected + fp_non_protected)) - (tp_protected / (tp_protected + fp_protected));
+    }
 
+    private int shifted_location_pred_parity(double tp_protected, double fp_protected, double tp_non_protected, double fp_non_protected) {
+        return (int) ((tp_protected*(tp_non_protected+fp_non_protected))/(tp_non_protected*(tp_protected+fp_protected))+.5);
+    }
 
     private static int shifted_location(double classified_prot_pos, double classified_non_prot_pos, double classified_prot_neg, double classified_non_prot_neg) {
         return (int) ((classified_prot_neg + classified_prot_pos) * ((classified_non_prot_pos) / (classified_non_prot_pos + classified_non_prot_neg)) - classified_prot_pos);

@@ -20,11 +20,8 @@ public class VanillaOnlineBoosting_Template {
     private static int indexOfDenied;
     private static int indexOfGranted;
     private static int indexOfDeprived;
-    private static double delayed_discrimination;
-    private static String  OPT;
-    public static OnlineSmoothBoost OnlineBoost;
-    private static ArrayList<Double> BACC = new ArrayList<Double>();
-    private static ArrayList<Double> Recall = new ArrayList<Double>();
+    private double delayed_discrimination;
+    private static String OPT;
 
     public ArrayList<Double> getBACC() {
         return BACC;
@@ -35,17 +32,21 @@ public class VanillaOnlineBoosting_Template {
     }
 
     private static ArrayList<Double> Gmean = new ArrayList<Double>();
-    private static ArrayList<Double> F1Score  = new ArrayList<Double>();
+    private static ArrayList<Double> F1Score = new ArrayList<Double>();
     private static ArrayList<Double> Accuracy = new ArrayList<Double>();
     private static ArrayList<Double> Kappa = new ArrayList<Double>();
     private static ArrayList<Double> StParity = new ArrayList<Double>();
     private static ArrayList<Double> EQOP = new ArrayList<Double>();
+    private static ArrayList<Double> time = new ArrayList<Double>();
+    private static ArrayList<Double> BACC = new ArrayList<Double>();
+    private static ArrayList<Double> Recall = new ArrayList<Double>();
+
 
     private final static Logger logger = Logger.getLogger(VanillaOnlineBoosting_Template.class.getName());
 
 
-    public VanillaOnlineBoosting_Template(int weakL , int saIndex, int indexOfDenied, int indexOfGranted, int indexOfDeprived, String OPT) {
-        this.weakL= weakL;
+    public VanillaOnlineBoosting_Template(int weakL, int saIndex, int indexOfDenied, int indexOfGranted, int indexOfDeprived, String OPT) {
+        this.weakL = weakL;
         this.saIndex = saIndex;
         this.indexOfGranted = indexOfGranted;
         this.indexOfDeprived = indexOfDeprived;
@@ -54,14 +55,14 @@ public class VanillaOnlineBoosting_Template {
     }
 
 
-
-    private static void static_monitor_fairness(double prot_pos, double non_prot_pos,
-                                                double prot_neg, double non_prot_neg) {
+    private void static_monitor_fairness(double prot_pos, double non_prot_pos,
+                                         double prot_neg, double non_prot_neg) {
 
         double temp_Wdp = prot_pos / (prot_pos + prot_neg + 1);
         double temp_Wfp = non_prot_pos / (non_prot_pos + non_prot_neg + 1);
         delayed_discrimination = temp_Wfp - temp_Wdp;
     }
+
     private static double equal_opportunity(double tp_protected, double fn_protected, double tp_non_protected, double fn_non_protected) {
         return tp_non_protected / (tp_non_protected + fn_non_protected) - tp_protected / (tp_protected + fn_protected);
     }
@@ -70,11 +71,11 @@ public class VanillaOnlineBoosting_Template {
     public void deploy(Instances buffer) throws Exception {
 
 
-        OnlineBoost = new OnlineSmoothBoost();
-        OnlineBoost.ensembleSizeOption.setValue(weakL);
-        OnlineBoost.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
-        OnlineBoost.setModelContext(new InstancesHeader(buffer));
-        OnlineBoost.prepareForUse();
+        OnlineSmoothBoost onlineBoost = new OnlineSmoothBoost();
+        onlineBoost.ensembleSizeOption.setValue(weakL);
+        onlineBoost.baseLearnerOption.setCurrentObject(new HoeffdingAdaptiveTree());
+        onlineBoost.setModelContext(new InstancesHeader(buffer));
+        onlineBoost.prepareForUse();
 
         WindowAUCImbalancedPerformanceEvaluator evaluator = new WindowAUCImbalancedPerformanceEvaluator();
         evaluator.widthOption.setValue(buffer.size());
@@ -96,7 +97,7 @@ public class VanillaOnlineBoosting_Template {
         for (int i = 0; i < buffer.size(); i++) {
             Instance inst = buffer.get(i);
 
-            double[] votes = OnlineBoost.getVotesForInstance(inst);
+            double[] votes = onlineBoost.getVotesForInstance(inst);
             double label = 0;
             try {
                 label = (votes[indexOfDenied] < votes[indexOfGranted]) ? indexOfGranted : indexOfDenied;
@@ -110,15 +111,13 @@ public class VanillaOnlineBoosting_Template {
                 }
             }
 
-            evaluator.addResult(new InstanceExample(inst), votes);
+            evaluator.addResult(new InstanceExample(inst), votes, indexOfGranted);
 
             if (inst.value(saIndex) == indexOfDeprived) {
                 if (label == indexOfGranted) {
                     classified_prot_pos++;
-
                 } else {
                     classified_prot_neg++;
-
                 }
 
                 if (label == indexOfGranted && inst.classValue() == indexOfGranted) {
@@ -141,10 +140,9 @@ public class VanillaOnlineBoosting_Template {
                 } else if (inst.classValue() == indexOfGranted && label != indexOfGranted) {
                     fn_non_protected += 1;
                 }
-
             }
 
-               OnlineBoost.trainOnInstanceImpl(inst);
+            onlineBoost.trainOnInstanceImpl(inst);
         }
         if (OPT.equals("SP")) {
             static_monitor_fairness(classified_prot_pos, classified_non_prot_pos, classified_prot_neg, classified_non_prot_neg);
